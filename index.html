@@ -762,29 +762,43 @@ document.addEventListener('keydown',e=>{
   if(KEYS[e.key]){player.want={...KEYS[e.key]};e.preventDefault();}
 });
 
-canvas.addEventListener('touchstart',e=>{
+// ── 滑動偵測：綁在 document，確保任何位置滑動都有效
+document.addEventListener('touchstart',e=>{
+  // D-pad 按鈕自己處理，不要干擾
+  if(e.target.closest('#dpad'))return;
   touchStart={x:e.touches[0].clientX,y:e.touches[0].clientY};
 },{passive:true});
-canvas.addEventListener('touchend',e=>{
-  if(!touchStart||state!=='playing')return;
+
+document.addEventListener('touchmove',e=>{
+  // 遊戲中阻止畫面捲動
+  if(state==='playing')e.preventDefault();
+},{passive:false});
+
+document.addEventListener('touchend',e=>{
+  if(e.target.closest('#dpad'))return;
+  if(!touchStart||state!=='playing'){touchStart=null;return;}
   const dx=e.changedTouches[0].clientX-touchStart.x;
   const dy=e.changedTouches[0].clientY-touchStart.y;
   touchStart=null;
-  if(Math.max(Math.abs(dx),Math.abs(dy))<12)return;
+  if(Math.max(Math.abs(dx),Math.abs(dy))<10)return;
   player.want=Math.abs(dx)>Math.abs(dy)
     ?(dx>0?{dx:1,dy:0}:{dx:-1,dy:0})
     :(dy>0?{dx:0,dy:1}:{dx:0,dy:-1});
 },{passive:true});
 
+// ── D-pad：touchstart 立即反應，不等 touchend
 function setDir(dx,dy){if(state==='playing')player.want={dx,dy};}
-document.getElementById('dpad-up').addEventListener('touchstart',e=>{e.preventDefault();setDir(0,-1);},{passive:false});
-document.getElementById('dpad-down').addEventListener('touchstart',e=>{e.preventDefault();setDir(0,1);},{passive:false});
-document.getElementById('dpad-left').addEventListener('touchstart',e=>{e.preventDefault();setDir(-1,0);},{passive:false});
-document.getElementById('dpad-right').addEventListener('touchstart',e=>{e.preventDefault();setDir(1,0);},{passive:false});
-document.getElementById('dpad-up').addEventListener('click',()=>setDir(0,-1));
-document.getElementById('dpad-down').addEventListener('click',()=>setDir(0,1));
-document.getElementById('dpad-left').addEventListener('click',()=>setDir(-1,0));
-document.getElementById('dpad-right').addEventListener('click',()=>setDir(1,0));
+['up','down','left','right'].forEach(dir=>{
+  const map={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
+  const btn=document.getElementById('dpad-'+dir);
+  const [ddx,ddy]=map[dir];
+  btn.addEventListener('touchstart',e=>{
+    e.preventDefault();e.stopPropagation();
+    setDir(ddx,ddy);
+  },{passive:false});
+  btn.addEventListener('touchend',e=>{e.preventDefault();},{passive:false});
+  btn.addEventListener('click',()=>setDir(ddx,ddy));
+});
 
 document.getElementById('btn-start').addEventListener('click',()=>{level=0;score=0;lives=3;document.getElementById('score-val').textContent='0';showLevelBanner();});
 document.getElementById('btn-level-go').addEventListener('click',startPlay);
