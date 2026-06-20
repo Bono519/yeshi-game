@@ -762,31 +762,62 @@ document.addEventListener('keydown',e=>{
   if(KEYS[e.key]){player.want={...KEYS[e.key]};e.preventDefault();}
 });
 
-// ── 滑動偵測：綁在 document，確保任何位置滑動都有效
-document.addEventListener('touchstart',e=>{
-  // D-pad 按鈕自己處理，不要干擾
-  if(e.target.closest('#dpad'))return;
-  touchStart={x:e.touches[0].clientX,y:e.touches[0].clientY};
-},{passive:true});
+// ══════════════════════════════════════════════
+//  觸控：手指按住任意處拖曳，小精靈跟著方向走
+//  邏輯：記錄手指起始點，持續偵測與起始點的偏移
+//        偏移超過死區(DEAD)才判定方向，持續更新 want
+// ══════════════════════════════════════════════
+const DEAD = 18;       // 死區像素，防抖動
+let dragActive = false;
+let dragOriginX = 0, dragOriginY = 0;
+let dragRAF = null;
 
-document.addEventListener('touchmove',e=>{
-  // 遊戲中阻止畫面捲動
-  if(state==='playing')e.preventDefault();
-},{passive:false});
+function updateDragDir(cx, cy){
+  if(!dragActive || state!=='playing') return;
+  const dx = cx - dragOriginX;
+  const dy = cy - dragOriginY;
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  if(Math.max(adx,ady) < DEAD) return; // 還在死區內，不動
+  // 以當前偏移決定方向（持續更新，不只判斷一次）
+  if(adx >= ady){
+    player.want = dx > 0 ? {dx:1,dy:0} : {dx:-1,dy:0};
+  } else {
+    player.want = dy > 0 ? {dx:0,dy:1} : {dx:0,dy:-1};
+  }
+}
 
-document.addEventListener('touchend',e=>{
-  if(e.target.closest('#dpad'))return;
-  if(!touchStart||state!=='playing'){touchStart=null;return;}
-  const dx=e.changedTouches[0].clientX-touchStart.x;
-  const dy=e.changedTouches[0].clientY-touchStart.y;
-  touchStart=null;
-  if(Math.max(Math.abs(dx),Math.abs(dy))<10)return;
-  player.want=Math.abs(dx)>Math.abs(dy)
-    ?(dx>0?{dx:1,dy:0}:{dx:-1,dy:0})
-    :(dy>0?{dx:0,dy:1}:{dx:0,dy:-1});
-},{passive:true});
+// touchstart：記錄起始點
+document.addEventListener('touchstart', e=>{
+  if(e.target.closest('#dpad')) return;
+  if(state !== 'playing') return;
+  e.preventDefault();
+  const t = e.touches[0];
+  dragActive   = true;
+  dragOriginX  = t.clientX;
+  dragOriginY  = t.clientY;
+}, {passive:false});
 
-// ── D-pad：touchstart 立即反應，不等 touchend
+// touchmove：持續更新方向 + 阻止捲動
+document.addEventListener('touchmove', e=>{
+  if(e.target.closest('#dpad')) return;
+  if(state !== 'playing') return;
+  e.preventDefault();
+  if(!dragActive) return;
+  const t = e.touches[0];
+  updateDragDir(t.clientX, t.clientY);
+}, {passive:false});
+
+// touchend：停止拖曳（小精靈保持最後方向繼續走）
+document.addEventListener('touchend', e=>{
+  if(e.target.closest('#dpad')) return;
+  dragActive = false;
+}, {passive:true});
+
+document.addEventListener('touchcancel', e=>{
+  dragActive = false;
+}, {passive:true});
+
+// ── D-pad（輔助，電腦測試用）
 function setDir(dx,dy){if(state==='playing')player.want={dx,dy};}
 ['up','down','left','right'].forEach(dir=>{
   const map={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
